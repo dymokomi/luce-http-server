@@ -1,0 +1,70 @@
+name: Correctness
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    name: Luce application (${{ matrix.host }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            host: arm64-macos
+          - runner: ubuntu-24.04
+            host: x86_64-linux
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: luce-http-server
+      - name: Read pinned dependencies
+        id: pins
+        run: |
+          echo "base=$(cat luce-http-server/bootstrap/BASE)" >> "$GITHUB_OUTPUT"
+          echo "luce=$(cat luce-http-server/bootstrap/LUCE)" >> "$GITHUB_OUTPUT"
+          echo "server=$(cat luce-http-server/bootstrap/SERVER)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          repository: dymokomi/luce-base
+          ref: ${{ steps.pins.outputs.base }}
+          path: luce-base
+      - uses: actions/checkout@v7
+        with:
+          repository: dymokomi/luce
+          ref: ${{ steps.pins.outputs.luce }}
+          path: luce
+      - uses: actions/checkout@v7
+        with:
+          repository: dymokomi/luce-server
+          ref: ${{ steps.pins.outputs.server }}
+          path: luce-server
+      - name: Select Clang
+        run: |
+          mkdir -p "$RUNNER_TEMP/luce-bin"
+          ln -s "$(command -v clang)" "$RUNNER_TEMP/luce-bin/cc"
+          echo "$RUNNER_TEMP/luce-bin" >> "$GITHUB_PATH"
+      - name: Build Base natively
+        working-directory: luce-base
+        run: ./build.sh
+      - name: Build Luce natively
+        working-directory: luce
+        env:
+          LUCE_BASE_COMPILER: ../luce-base/build/luce-base
+        run: ./build.sh
+      - name: Test all native optimization levels
+        working-directory: luce-http-server
+        run: |
+          mkdir -p build
+          set -o pipefail
+          ./test.sh 2>&1 | tee build/gate.log
+      - name: Retain validation log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: luce-http-server-${{ matrix.host }}-${{ github.sha }}
+          path: luce-http-server/build/gate.log

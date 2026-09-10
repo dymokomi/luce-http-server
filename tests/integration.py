@@ -79,6 +79,8 @@ def check(binary):
                 assert request('GET', '/api/items/' + value)[0] == 400
             name = 'Luce "friends" €'
             assert json.loads(request('GET', '/api/greet?name=' + quote(name))[2]) == {'message': f'Hello, {name}!'}
+            for value in ('%ff', '%00', '%x', '%22%0d'):
+                assert request('GET', '/api/greet?name=' + value)[0] == 400
             assert request('DELETE', '/api/health')[0] == 405
             assert request('OPTIONS', '/api/health')[0] == 204
             assert request('GET', '/does-not-exist')[0] == 404
@@ -94,6 +96,7 @@ def check(binary):
             status, headers, body = request('HEAD', '/api/files/payload.bin')
             assert status == 200 and int(headers['Content-Length']) == len(data) and not body
             assert request('POST', '/api/echo', data[:100000])[2] == data[:100000]
+            assert request('POST', '/api/echo', data)[0] == 413
             with ThreadPoolExecutor(max_workers=16) as clients:
                 def check_client(index):
                     value = f'client-{index}'

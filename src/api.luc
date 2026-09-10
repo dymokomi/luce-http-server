@@ -22,11 +22,20 @@ func quote_url_text(value: str) -> str:
     return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 pub func greet(request: http.Request, config: Settings) -> unit!:
-    let name = (try http.query(request, "name")) else "world"
+    let value = http.query(request, "name") catch failure:
+        if failure.code == http.invalid_request:
+            try http.json(request, 400, "{\"error\":\"invalid query value\"}")
+            return
+        error(failure.code, failure.message)
+    let name = value else "world"
     try http.json(request, 200, "{\"message\":" + quote_url_text(f"Hello, {name}!") + "}")
 
 pub func echo(request: http.Request, config: Settings) -> unit!:
-    let data = try http.body_bytes(request, 1048576)
+    let data = http.body_bytes(request, 1048576) catch failure:
+        if failure.code == http.limit_exceeded:
+            try http.json(request, 413, "{\"error\":\"echo body exceeds 1 MiB\"}")
+            return
+        error(failure.code, failure.message)
     try http.reply(request, 200, "application/octet-stream", data)
 
 pub func upload(request: http.Request, config: Settings) -> unit!:
