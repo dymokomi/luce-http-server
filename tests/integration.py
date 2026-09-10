@@ -40,15 +40,21 @@ def read_frame(stream):
     return opcode & 15, data
 
 
-def check(binary):
+def check(binary, heap=False):
     with tempfile.TemporaryDirectory(prefix='luce-http-app-') as temporary:
         root = Path(temporary)
         public, uploads = root / 'public', root / 'uploads'
         shutil.copytree(ROOT / 'public', public)
         uploads.mkdir()
-        process = subprocess.Popen([str(binary), '--port', '0', '--public', str(public),
-            '--uploads', str(uploads), '--network-workers', '8', '--application-workers', '3'],
+        command = [str(binary), '--port', '0', '--public', str(public),
+            '--uploads', str(uploads), '--network-workers', '8', '--application-workers', '3']
+        if heap:
+            if sys.platform != 'darwin':
+                raise RuntimeError('--heap requires the macOS leaks tool')
+            command = ['/usr/bin/leaks', '--quiet', '--noContent', '--atExit', '--', *command]
+        process = subprocess.Popen(command,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        application_pid = process.pid
         try:
             ready, _, _ = select.select([process.stdout], [], [], 15)
             assert ready, 'application startup timed out'
@@ -57,6 +63,12 @@ def check(binary):
                 stdout, stderr = process.communicate(timeout=5)
                 raise AssertionError((line, process.returncode, stdout, stderr))
             port = int(line.split()[1])
+            if heap:
+                # leaks is a parent wrapper and does not forward SIGTERM. Only
+                # target its own application child; never search by program name.
+                children = subprocess.check_output(['pgrep', '-P', str(process.pid)], text=True).split()
+                assert len(children) == 1, children
+                application_pid = int(children[0])
 
             def request(method, path, data=None, headers=None):
                 connection = http.client.HTTPConnection('127.0.0.1', port, timeout=8)
@@ -128,15 +140,30 @@ def check(binary):
             while set(p.name for p in uploads.iterdir()) != {'payload.bin'} and time.monotonic() < deadline:
                 time.sleep(.01)
             assert set(p.name for p in uploads.iterdir()) == {'payload.bin'}
-            process.send_signal(signal.SIGTERM)
-            stdout, stderr = process.communicate(timeout=10)
-            assert process.returncode == 0 and stdout == b'STOPPED\n' and stderr == b'', (process.returncode, stdout, stderr)
+            os.kill(application_pid, signal.SIGTERM)
+            stdout, stderr = process.communicate(timeout=30 if heap else 10)
+            if heap:
+                assert stdout.startswith(b'STOPPED\n') and b'0 leaks for 0 total leaked bytes' in stdout, stdout
+                print(stdout.decode(), end='')
+            else:
+                assert stdout == b'STOPPED\n', stdout
+            assert process.returncode == 0 and stderr == b'', (process.returncode, stdout, stderr)
         finally:
             if process.poll() is None:
+                if application_pid != process.pid:
+                    try:
+                        os.kill(application_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                 process.kill()
                 process.communicate()
         print('PASS Luce application: REST, static, streamed files, concurrent clients, WebSocket, ARC cleanup, SIGTERM', flush=True)
 
 
 if __name__ == '__main__':
-    check(Path(sys.argv[1]).resolve())
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('binary', type=Path)
+    parser.add_argument('--heap', action='store_true', help='also check native heap cleanup on macOS')
+    arguments = parser.parse_args()
+    check(arguments.binary.resolve(), arguments.heap)
