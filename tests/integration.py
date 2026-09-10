@@ -21,6 +21,29 @@ from urllib.parse import quote
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def finish_process(process, timeout):
+    """Wait for the owned process, not pipe EOF from macOS diagnostic helpers."""
+    streams = (process.stdout, process.stderr)
+    chunks = ([], [])
+    for stream in streams:
+        os.set_blocking(stream.fileno(), False)
+    deadline = time.monotonic() + timeout
+    while True:
+        for stream, output in zip(streams, chunks):
+            data = stream.read1(65536)
+            if data:
+                output.append(data)
+        if process.poll() is not None:
+            for stream, output in zip(streams, chunks):
+                while data := stream.read1(65536):
+                    output.append(data)
+            return tuple(b''.join(output) for output in chunks)
+        if time.monotonic() >= deadline:
+            raise subprocess.TimeoutExpired(process.args, timeout,
+                output=b''.join(chunks[0]), stderr=b''.join(chunks[1]))
+        time.sleep(.01)
+
+
 def frame(opcode, payload=b''):
     mask = os.urandom(4)
     length = len(payload)
@@ -141,7 +164,7 @@ def check(binary, heap=False):
                 time.sleep(.01)
             assert set(p.name for p in uploads.iterdir()) == {'payload.bin'}
             os.kill(application_pid, signal.SIGTERM)
-            stdout, stderr = process.communicate(timeout=30 if heap else 10)
+            stdout, stderr = finish_process(process, 30) if heap else process.communicate(timeout=10)
             if heap:
                 assert stdout.startswith(b'STOPPED\n') and b'0 leaks for 0 total leaked bytes' in stdout, stdout
                 print(stdout.decode(), end='')
