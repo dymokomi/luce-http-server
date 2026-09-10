@@ -129,11 +129,11 @@ A clean exit with empty stderr also checks Luce's ARC leak diagnostics. CI build
 the pinned toolchain from source on ARM64 macOS and x86-64 Linux.
 See [validation evidence](docs/VALIDATION.md).
 
-Licensed under MIT or Apache-2.0, at your option.
-
 On macOS, CI also runs the complete application through `leaks --atExit` and
 requires zero leaked blocks/bytes. You can reproduce that check with:
 
 ```sh
 python3 tests/integration.py build/luce-http-server-0 --heap
 ```
+
+Licensed under MIT or Apache-2.0, at your option.

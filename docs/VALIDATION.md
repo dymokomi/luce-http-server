@@ -20,12 +20,19 @@ focused compiler regressions, and pinned in `bootstrap/BASE` and `bootstrap/LUCE
 The final local native matrix passes with those fixes. Running
 `python3 tests/integration.py build/luce-http-server-0 --heap` on macOS reports
 **zero leaked blocks and zero leaked bytes** for the complete application test.
-The current hosted workflow repeats that heap check and retains `heap.log`.
+The [hosted run at `d7842a0`](https://github.com/dymokomi/luce-http-server/actions/runs/34540755343)
+also passed both native matrices and the macOS heap check; its artifacts retain
+`gate.log` and `heap.log`. Later dependency pins include test-harness corrections
+with the same compiler/runtime implementation.
 
 The worker regression in Luce starts 64 tasks with cycles, copied results, and
 dynamic failures at every native optimization level. It checks both normal ARC
 exit behavior and actual native heap cleanup against the updated Base compiler.
 This complements the server's own independent HTTP/WebSocket/TCP/lifetime tests.
+
+The default sibling-checkout build and `./run.sh --port 0` were also exercised
+locally after rebuilding both compilers natively. The health endpoint returned
+the expected JSON, and SIGTERM produced a successful exit with empty stderr.
 
 This is a development package (`0.1.0-dev`), not a production release declaration.
 TLS, databases, and package-manager installation remain separate work.
