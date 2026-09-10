@@ -1,0 +1,19 @@
+import luce_server.http as http
+import application
+import settings
+
+pub func main(arguments: list[str]) -> int!:
+    let config = try settings.parse(arguments)
+    var options = http.defaults()
+    options.address = config.address
+    options.port = config.port
+    options.network_threads = config.network_workers
+    options.temporary_directory = config.upload_directory
+    with try http.open(options) as server:
+        try application.configure(server)
+        try http.static_files(server, "/", config.public_directory)
+        try http.shutdown_on_signals(server)
+        try http.start(server)
+        try application.run_workers(try http.worker_token(server), config.application_workers, try http.port(server), config)
+    print("STOPPED")
+    return 0

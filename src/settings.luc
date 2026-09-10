@@ -1,0 +1,37 @@
+## Plain values can be copied into Luce workers; server handles never cross.
+import luce_server.http as http
+
+pub struct Settings:
+    pub var address: str = "127.0.0.1"
+    pub var port: int = 8080
+    pub var network_workers: int = 8
+    pub var application_workers: int = 2
+    pub var public_directory: str = "public"
+    pub var upload_directory: str = "uploads"
+
+pub func parse(arguments: list[str]) -> Settings!:
+    var result = Settings()
+    var at = 0
+    while at < arguments.length:
+        let option = arguments[at]
+        if at + 1 >= arguments.length:
+            error(http.invalid_request, f"missing value for {option}")
+        let value = arguments[at + 1]
+        if option == "--port":
+            result.port = try int(value)
+        elif option == "--address":
+            result.address = value
+        elif option == "--network-workers":
+            result.network_workers = try int(value)
+        elif option == "--application-workers":
+            result.application_workers = try int(value)
+        elif option == "--public":
+            result.public_directory = value
+        elif option == "--uploads":
+            result.upload_directory = value
+        else:
+            error(http.invalid_request, f"unknown option: {option}")
+        at += 2
+    if result.application_workers < 1 or result.application_workers > 32:
+        error(http.invalid_request, "application workers must be between 1 and 32")
+    return result

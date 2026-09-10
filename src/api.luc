@@ -1,0 +1,55 @@
+## Application behavior stays in Luce. Each handler receives an owned request;
+## the Base package owns parsing, routing, connection lifetime and file transfer.
+import luce_server.http as http
+from settings import Settings
+
+pub func health(request: http.Request, config: Settings) -> unit!:
+    try http.json(request, 200, "{\"status\":\"ok\"}")
+
+## URL parameters have already been decoded and validated by the Base router.
+pub func item(request: http.Request, config: Settings) -> unit!:
+    let identifier = int(http.parameter(request, "id") else "") catch failure:
+        try http.json(request, 400, "{\"error\":\"id must be an integer\"}")
+        return
+    if identifier < 1:
+        try http.json(request, 400, "{\"error\":\"id must be positive\"}")
+        return
+    try http.json(request, 200, f"{{\"id\":{identifier},\"name\":\"Example item {identifier}\"}}")
+
+## Decoded URL text contains no control characters; quoting its two remaining
+## JSON delimiters preserves Unicode without a second encoding conversion.
+func quote_url_text(value: str) -> str:
+    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+pub func greet(request: http.Request, config: Settings) -> unit!:
+    let name = (try http.query(request, "name")) else "world"
+    try http.json(request, 200, "{\"message\":" + quote_url_text(f"Hello, {name}!") + "}")
+
+pub func echo(request: http.Request, config: Settings) -> unit!:
+    let data = try http.body_bytes(request, 1048576)
+    try http.reply(request, 200, "application/octet-stream", data)
+
+pub func upload(request: http.Request, config: Settings) -> unit!:
+    let name = http.parameter(request, "name") else ""
+    let destination = config.upload_directory + "/" + name
+    http.save_body(request, destination, false) catch failure:
+        if failure.code == http.file_exists:
+            try http.json(request, 409, "{\"error\":\"file already exists\"}")
+            return
+        error(failure.code, failure.message)
+    try http.json(request, 201, "{\"name\":" + quote_url_text(name) + ",\"stored\":true}")
+
+pub func download(request: http.Request, config: Settings) -> unit!:
+    let name = http.parameter(request, "name") else ""
+    http.reply_file(request, config.upload_directory + "/" + name) catch failure:
+        if failure.code == http.file_missing:
+            try http.json(request, 404, "{\"error\":\"file not found\"}")
+            return
+        error(failure.code, failure.message)
+
+pub func websocket_echo(request: http.Request, config: Settings) -> unit!:
+    if http.is_websocket_open(request):
+        try http.accept_websocket(request, "")
+    else:
+        let data = try http.body_bytes(request, 1048576)
+        try http.send_message(request, data)
