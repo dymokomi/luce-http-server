@@ -99,6 +99,11 @@ manager is not implemented yet. It does not substitute a C server implementation
 The compiler consumes that tree through normal Luce/Base interop and produces a
 native executable.
 
+Source staging and generated Base packages are temporary and cleaned up after
+the compiler finishes, including failures. A normal build leaves only the
+application binary in `build/`; the test matrix additionally produces its named
+test binaries.
+
 ## Reproduce the toolchain and tests
 
 From a directory containing all four repositories, use dedicated clean checkouts

@@ -5,23 +5,26 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def build(luce: Path, base: Path, server: Path, output: Path, opt: int) -> None:
     luce, base, server, output = (path.resolve() for path in (luce, base, server, output))
-    project = output.parent / (output.name + ".sources")
-    source = project / "src"
-    if source.exists():
-        shutil.rmtree(source)
-    shutil.copytree(ROOT / "src", source)
-    shutil.copytree(server / "src/luce_server", source / "luce_server",
-                    ignore=shutil.ignore_patterns(".DS_Store"))
-    shutil.copy2(ROOT / "luce.toml", project / "luce.toml")
-    environment = dict(os.environ, LUCE_BASE=str(base))
-    subprocess.run([str(luce), "build", str(source / "main.luc"), "--native", "--opt",
-                    str(opt), "-o", str(output)], env=environment, cwd=ROOT, check=True)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Source staging is private to this invocation and is removed even when a
+    # compiler fails. The output directory contains only requested build products.
+    with tempfile.TemporaryDirectory(prefix="luce-http-server-") as temporary:
+        project = Path(temporary)
+        source = project / "src"
+        shutil.copytree(ROOT / "src", source)
+        shutil.copytree(server / "src/luce_server", source / "luce_server",
+                        ignore=shutil.ignore_patterns(".DS_Store"))
+        shutil.copy2(ROOT / "luce.toml", project / "luce.toml")
+        environment = dict(os.environ, LUCE_BASE=str(base))
+        subprocess.run([str(luce), "build", str(source / "main.luc"), "--native", "--opt",
+                        str(opt), "-o", str(output)], env=environment, cwd=ROOT, check=True)
 
 
 if __name__ == "__main__":
