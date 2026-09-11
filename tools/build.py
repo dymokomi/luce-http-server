@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build the Luce application with a separate Base source package, natively."""
 import argparse
+import json
 import os
 from pathlib import Path
 import shutil
@@ -19,9 +20,9 @@ def build(luce: Path, base: Path, server: Path, output: Path, opt: int) -> None:
         project = Path(temporary)
         source = project / "src"
         shutil.copytree(ROOT / "src", source)
-        shutil.copytree(server / "src/luce_server", source / "luce_server",
-                        ignore=shutil.ignore_patterns(".DS_Store"))
-        shutil.copy2(ROOT / "luce.toml", project / "luce.toml")
+        (project / "luce.toml").write_text(
+            '[package]\nname = "luce_http_server"\nsource = "src"\n\n'
+            '[dependencies]\nluce_server = ' + json.dumps(str(server)) + '\n')
         environment = dict(os.environ, LUCE_BASE=str(base))
         subprocess.run([str(luce), "build", str(source / "main.luc"), "--native", "--opt",
                         str(opt), "-o", str(output)], env=environment, cwd=ROOT, check=True)

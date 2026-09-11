@@ -1,27 +1,79 @@
 # luce-http-server
 
 A native HTTP application written entirely in **Luce**, using the separate
-[`luce-server`](https://github.com/dymokomi/luce-server) library written in
-**luce-base**. It demonstrates REST handlers, static pages, file uploads/downloads,
-WebSockets, and multiple application workers with deterministic resource cleanup.
-
-## Run locally
-
-Use sibling checkouts of `luce-base`, `luce`, `luce-server`, and this repository.
-The exact compatible commits are recorded in `bootstrap/BASE`, `bootstrap/LUCE`,
-and `bootstrap/SERVER`. Both compilers use Base's native backend.
+[luce-server](https://github.com/dymokomi/luce-server) library written in **Luce
+Base**. It demonstrates REST handlers, static pages, uploads/downloads, WebSockets
+and multiple application workers.
 
 ```sh
-# After building the pinned Base and Luce compilers:
 ./build.sh
 ./run.sh --port 8080
 ```
 
-Open <http://127.0.0.1:8080>. The demo calls a REST endpoint, uploads a file, and
-exchanges WebSocket messages. Ctrl-C drains the server and joins its workers.
+Open <http://127.0.0.1:8080>. The page calls the REST API, uploads a file and exchanges
+WebSocket messages. Ctrl-C drains the server and joins its workers. Sibling
+checkouts of `luce-base`, `luce`, `luce-server` and this repository are sufficient;
+exact tested commits are recorded under `bootstrap/`. Both compilers use native
+compilation by default.
 
-The run script creates the default `uploads` directory. To invoke the binary
-directly, create your directories first:
+## Writing application behavior
+
+A handler takes a scoped request and returns an owned response:
+
+```luce
+pub func health(self, request: Request) -> Response!:
+    let result = try Value()
+    try result.set_text("status", "ok")
+    return try Response.json(result)
+```
+
+The worker-local factory registers methods directly:
+
+```luce
+let api = Api(upload_directory)
+let router = try Router()
+try router.get("/api/health", api.health)
+try router.get("/api/items/{id}", api.item)
+try router.websocket("/ws/echo", api.websocket_echo)
+return try router.application()
+```
+
+`Value` comes from the standard `json` module. The library supplies `Server`,
+`ServerConfig`, `Router`, `Request`, `Response`, `Body`, `StaticRoot` and session
+objects. It owns the threads, routing, wire protocols, bounded storage and cleanup.
+Adding an endpoint requires only a handler and route declaration. Each worker
+constructs its own application state; no worker token or task scheduling appears
+in the application.
+
+WebSocket behavior is similarly direct:
+
+```luce
+pub func websocket_echo(self, session: Session) -> unit!:
+    try session.accept()
+    while let message = try session.receive():
+        try session.send(message)
+```
+
+The example accepts openings without an identity/Origin restriction and chooses
+no subprotocol. An application's opening policy belongs in this handler. TLS and
+database integration remain future work.
+
+| Endpoint | Behavior |
+| --- | --- |
+| GET /api/health | JSON health reply |
+| GET /api/items/{id} | REST resource; invalid/nonpositive IDs return 400 |
+| GET /api/greet?name=Luce | Decoded query value in a structured JSON reply |
+| POST /api/echo | Binary echo, limited to 1 MiB; larger input returns 413 |
+| PUT /api/files/{name} | Raw file upload; 201 on success, 409 if already present |
+| GET /api/files/{name} | File download; missing files return 404 |
+| GET /ws/echo | WebSocket text/binary echo |
+| GET /... | Static content from the public directory |
+
+GET supports HEAD fallback. API paths support OPTIONS and method-not-allowed
+replies and take precedence over the static mount. Uploads are raw request bodies.
+The run script creates the default `uploads` directory; custom directory paths
+must already exist. Addresses are numeric IPv4/IPv6, and port zero selects a free
+port. Startup prints `READY <port>`.
 
 ```sh
 ./build/luce-http-server --address 127.0.0.1 --port 8080 \
@@ -29,116 +81,24 @@ directly, create your directories first:
   --public /path/to/public --uploads /path/to/uploads
 ```
 
-The address must be numeric IPv4 or IPv6. Port zero selects a free port; startup
-prints `READY <port>`. Custom directory paths must already exist. Files uploaded
-through the demo go to the configured upload directory and never replace an
-existing file.
+`src/main.luc` configures the server and owns its run operation.
+`src/application.luc` declares routes; `src/api.luc` holds application behavior;
+`src/settings.luc` parses CLI settings. Static assets live in `public/`.
 
-## Write an API
-
-A handler is an ordinary Luce function:
-
-```luce
-import luce_server.http as http
-from settings import Settings
-
-pub func health(request: http.Request, config: Settings) -> unit!:
-    try http.json(request, 200, "{\"status\":\"ok\"}")
-```
-
-Add the function to the catalog in `src/application.luc`:
-
-```luce
-Route(method = "GET", pattern = "/api/health", handler = api.health)
-```
-
-Base matches the method/path and queues an owned request. A Luce worker invokes
-the handler, and Base sends its reply. The `with` scope releases each request;
-ARC owns values returned across the boundary. The application passes only plain
-configuration and an opaque integer worker token across Luce task boundaries.
-Handles stay on the worker that owns them.
-
-Routing supports decoded `{name}` path parameters, query values, explicit status
-codes and custom response headers. `http.json` sets the media type; handlers
-supply serialized JSON. The sample item handler validates its integer ID, then
-returns an illustrative resource. There is no database yet.
-
-| Endpoint | Behavior |
-| --- | --- |
-| GET /api/health | JSON health reply |
-| GET /api/items/{id} | Example REST resource; invalid IDs return 400 |
-| GET /api/greet?name=Luce | Decoded query value in a JSON reply |
-| POST /api/echo | Binary echo, limited to 1 MiB; larger input returns 413 |
-| PUT /api/files/{name} | Raw file upload; 201 on success, 409 if already present |
-| GET /api/files/{name} | File download; missing files return 404 |
-| GET /ws/echo | WebSocket text/binary echo |
-| GET /... | Static content from the public directory |
-
-GET routes support HEAD fallback; registered API paths support automatic OPTIONS
-and return 405 for unsupported methods. API routes take precedence over the
-static mount. Uploads are raw request bodies, not multipart forms. The browser
-uses PUT with the selected File as its body.
-
-The WebSocket echo endpoint accepts offered connections without identity/Origin
-restrictions and chooses no subprotocol. It is a local demonstration endpoint;
-a real application's policy belongs in its opening handler. TLS and database
-integration are separate future work.
-
-## Source layout
-
-- `src/main.luc` configures and owns the server lifetime.
-- `src/settings.luc` parses plain configuration values.
-- `src/application.luc` registers routes and runs Luce application workers.
-- `src/api.luc` implements application behavior.
-- `public/` contains the browser demo.
-- `tests/` drives the real native executable with independent Python clients.
-
-All application implementation sources are `.luc`. The build script stages the
-unchanged Base package into an isolated consumer source tree because the package
-manager is not implemented yet. It does not substitute a C server implementation.
-The compiler consumes that tree through normal Luce/Base interop and produces a
-native executable.
-
-Source staging and generated Base packages are temporary and cleaned up after
-the compiler finishes, including failures. A normal build leaves only the
-application binary in `build/`; the test matrix additionally produces its named
-test binaries.
-
-## Reproduce the toolchain and tests
-
-From a directory containing all four repositories, use dedicated clean checkouts
-at the pins (avoid switching a checkout with local work). In the Base checkout,
-run `./build.sh`. In the Luce checkout, run:
-
-```sh
-LUCE_BASE_COMPILER=../luce-base/build/luce-base ./build.sh
-```
-
-Then, in this checkout:
+All application implementation sources are `.luc`. The manifest declares a local
+`luce_server` dependency, resolved through the package's actual public exports.
+Builds use automatically removed temporary consumer workspaces when overriding
+package locations. Normal build output is the binary, with no generated Base code
+or staged dependency trees left behind. Tests additionally produce named binaries.
 
 ```sh
 ./test.sh
+python3 tests/integration.py build/luce-http-server-0 --heap  # macOS
 ```
 
-Custom compiler/package locations are supported:
-
-```sh
-./test.sh --base /path/to/luce-base --luce /path/to/luce \
-  --server /path/to/luce-server
-```
-
-Tests cover all native optimization levels 0–3: REST validation, static assets,
-large file transfers, overwrite refusal, HEAD, malformed input, concurrent
-clients, WebSocket text/binary/control frames, temporary cleanup and SIGTERM.
-A clean exit with empty stderr also checks Luce's ARC leak diagnostics. CI builds
-the pinned toolchain from source on ARM64 macOS and x86-64 Linux.
-See [validation evidence](docs/VALIDATION.md).
-
-On macOS, CI also runs the complete application through `leaks --atExit` and
-requires zero leaked blocks/bytes. You can reproduce that check with:
-
-```sh
-python3 tests/integration.py build/luce-http-server-0 --heap
-```
-
-Licensed under MIT or Apache-2.0, at your option.
+Tests drive real binaries at native optimization levels 0–3 using independent
+Python clients. They cover REST validation, Unicode/JSON, static content, large
+file transfers, overwrite refusal, HEAD, malformed input, concurrent clients,
+WebSocket control/data frames, temporary cleanup and SIGTERM. See
+[validation evidence](docs/VALIDATION.md). CI runs the pinned toolchain on ARM64
+macOS and x86-64 Linux. Licensed under MIT or Apache-2.0.

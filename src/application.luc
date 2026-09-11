@@ -1,52 +1,16 @@
-## A small application route catalog. Matching is done by Base; function values
-## stay inside each Luce worker and are never called from a foreign thread.
-import luce_server.http as http
-import api
-from settings import Settings
+## Each worker constructs its own handlers. The server owns thread startup,
+## dispatch and shutdown; this factory declares only application behavior.
+from http import Router, Application
+from api import Api
 
-struct Route:
-    var method: str
-    var pattern: str
-    var handler: func(http.Request, Settings) -> unit!
-    var websocket: bool = false
-
-func catalog() -> list[Route]:
-    return [
-        Route(method = "GET", pattern = "/api/health", handler = api.health),
-        Route(method = "GET", pattern = "/api/items/{id}", handler = api.item),
-        Route(method = "GET", pattern = "/api/greet", handler = api.greet),
-        Route(method = "POST", pattern = "/api/echo", handler = api.echo),
-        Route(method = "PUT", pattern = "/api/files/{name}", handler = api.upload),
-        Route(method = "GET", pattern = "/api/files/{name}", handler = api.download),
-        Route(method = "GET", pattern = "/ws/echo", handler = api.websocket_echo, websocket = true),
-    ]
-
-pub func configure(server: http.Server) -> unit!:
-    let routes = catalog()
-    var index = 0
-    for route in routes:
-        if route.websocket:
-            try http.websocket_route(server, route.pattern, index)
-        else:
-            try http.route(server, route.method, route.pattern, index)
-        index += 1
-
-func work(token: int, config: Settings) -> unit!:
-    let routes = catalog()
-    with try http.attach(token) as worker:
-        while let request = http.next(worker):
-            with request as owned:
-                let index = http.route_id(owned)
-                routes[index].handler(owned, config) catch failure:
-                    http.json(owned, 500, "{\"error\":\"request could not be completed\"}") catch ignored:
-                        discard(ignored)
-
-## Tasks have lexical lifetimes in Luce. Bounded recursion starts N workers and
-## keeps every task in its own scope until the Base server's shutdown completes.
-pub func run_workers(token: int, count: int, port: int, config: Settings) -> unit!:
-    if count == 0:
-        print(f"READY {port}")
-        return
-    let worker = spawn work(token, config)
-    try run_workers(token, count - 1, port, config)
-    try wait worker
+pub func configure(upload_directory: str) -> Application!:
+    let api = Api(upload_directory)
+    let router = try Router()
+    try router.get("/api/health", api.health)
+    try router.get("/api/items/{id}", api.item)
+    try router.get("/api/greet", api.greet)
+    try router.post("/api/echo", api.echo)
+    try router.put("/api/files/{name}", api.upload)
+    try router.get("/api/files/{name}", api.download)
+    try router.websocket("/ws/echo", api.websocket_echo)
+    return try router.application()

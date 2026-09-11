@@ -1,3 +1,6 @@
 [package]
 name = "luce_http_server"
 source = "src"
+
+[dependencies]
+luce_server = "../luce-server"

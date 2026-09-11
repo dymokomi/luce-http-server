@@ -1,5 +1,5 @@
-## Plain values can be copied into Luce workers; server handles never cross.
-import luce_server.http as http
+## Application CLI settings. ServerConfig validates transport limits separately.
+import http
 
 pub struct Settings:
     pub var address: str = "127.0.0.1"

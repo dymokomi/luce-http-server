@@ -1,64 +1,74 @@
-## Application behavior stays in Luce. Each handler receives an owned request;
-## the Base package owns parsing, routing, connection lifetime and file transfer.
-import luce_server.http as http
-from settings import Settings
+## REST and session behavior. The package owns requests, wire framing, bounded
+## storage and cleanup; the standard JSON value owns precise serialization.
+from http import Request, Response
+from json import Value
+from websocket import Session
+import http
 
-pub func health(request: http.Request, config: Settings) -> unit!:
-    try http.json(request, 200, "{\"status\":\"ok\"}")
+func problem(status: int, message: str) -> Response!:
+    let result = try Value()
+    try result.set_text("error", message)
+    return try Response.json(result, status)
 
-## URL parameters have already been decoded and validated by the Base router.
-pub func item(request: http.Request, config: Settings) -> unit!:
-    let identifier = int(http.parameter(request, "id") else "") catch failure:
-        try http.json(request, 400, "{\"error\":\"id must be an integer\"}")
-        return
-    if identifier < 1:
-        try http.json(request, 400, "{\"error\":\"id must be positive\"}")
-        return
-    try http.json(request, 200, f"{{\"id\":{identifier},\"name\":\"Example item {identifier}\"}}")
+pub class Api:
+    var upload_directory: str
 
-## Decoded URL text contains no control characters; quoting its two remaining
-## JSON delimiters preserves Unicode without a second encoding conversion.
-func quote_url_text(value: str) -> str:
-    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    pub func init(self, upload_directory: str):
+        self.upload_directory = upload_directory
 
-pub func greet(request: http.Request, config: Settings) -> unit!:
-    let value = http.query(request, "name") catch failure:
-        if failure.code == http.invalid_request:
-            try http.json(request, 400, "{\"error\":\"invalid query value\"}")
-            return
-        error(failure.code, failure.message)
-    let name = value else "world"
-    try http.json(request, 200, "{\"message\":" + quote_url_text(f"Hello, {name}!") + "}")
+    pub func health(self, request: Request) -> Response!:
+        let result = try Value()
+        try result.set_text("status", "ok")
+        return try Response.json(result)
 
-pub func echo(request: http.Request, config: Settings) -> unit!:
-    let data = http.body_bytes(request, 1048576) catch failure:
-        if failure.code == http.limit_exceeded:
-            try http.json(request, 413, "{\"error\":\"echo body exceeds 1 MiB\"}")
-            return
-        error(failure.code, failure.message)
-    try http.reply(request, 200, "application/octet-stream", data)
+    pub func item(self, request: Request) -> Response!:
+        let identifier = request.integer_parameter("id") catch failure:
+            return try problem(400, "id must be an integer")
+        if identifier < 1:
+            return try problem(400, "id must be positive")
+        let result = try Value()
+        try result.set_integer("id", identifier)
+        try result.set_text("name", f"Example item {identifier}")
+        return try Response.json(result)
 
-pub func upload(request: http.Request, config: Settings) -> unit!:
-    let name = http.parameter(request, "name") else ""
-    let destination = config.upload_directory + "/" + name
-    http.save_body(request, destination, false) catch failure:
-        if failure.code == http.file_exists:
-            try http.json(request, 409, "{\"error\":\"file already exists\"}")
-            return
-        error(failure.code, failure.message)
-    try http.json(request, 201, "{\"name\":" + quote_url_text(name) + ",\"stored\":true}")
+    pub func greet(self, request: Request) -> Response!:
+        let value = request.query("name") catch failure:
+            if failure.code == http.invalid_request:
+                return try problem(400, "invalid query value")
+            error(failure.code, failure.message)
+        let name = value else "world"
+        let result = try Value()
+        try result.set_text("message", f"Hello, {name}!")
+        return try Response.json(result)
 
-pub func download(request: http.Request, config: Settings) -> unit!:
-    let name = http.parameter(request, "name") else ""
-    http.reply_file(request, config.upload_directory + "/" + name) catch failure:
-        if failure.code == http.file_missing:
-            try http.json(request, 404, "{\"error\":\"file not found\"}")
-            return
-        error(failure.code, failure.message)
+    pub func echo(self, request: Request) -> Response!:
+        let body = try request.body()
+        let data = body.bytes(1048576) catch failure:
+            if failure.code == http.limit_exceeded:
+                return try problem(413, "echo body exceeds 1 MiB")
+            error(failure.code, failure.message)
+        return try Response.bytes(data)
 
-pub func websocket_echo(request: http.Request, config: Settings) -> unit!:
-    if http.is_websocket_open(request):
-        try http.accept_websocket(request, "")
-    else:
-        let data = try http.body_bytes(request, 1048576)
-        try http.send_message(request, data)
+    pub func upload(self, request: Request) -> Response!:
+        let name = request.parameter("name") else ""
+        let body = try request.body()
+        body.save(self.upload_directory + "/" + name) catch failure:
+            if failure.code == http.file_exists:
+                return try problem(409, "file already exists")
+            error(failure.code, failure.message)
+        let result = try Value()
+        try result.set_text("name", name)
+        try result.set_boolean("stored", true)
+        return try Response.json(result, 201)
+
+    pub func download(self, request: Request) -> Response!:
+        let name = request.parameter("name") else ""
+        return Response.file(self.upload_directory + "/" + name) catch failure:
+            if failure.code == http.file_missing:
+                return try problem(404, "file not found")
+            error(failure.code, failure.message)
+
+    pub func websocket_echo(self, session: Session) -> unit!:
+        try session.accept()
+        while let message = try session.receive():
+            try session.send(message)
