@@ -20,3 +20,8 @@ or copied dependency tree remains in normal build output.
 
 CI runs the same native matrix on ARM64 macOS and x86-64 Linux. Local evidence does
 not claim Linux execution; that workflow result is recorded separately after push.
+
+The section-seven delivery pass re-ran all native optimization levels 0–3 with
+Base `51a02e5`, Luce `29c64f6` and the current server source. REST, static content,
+streamed files, concurrent clients, WebSocket, ARC cleanup and SIGTERM passed.
+The exact pins under `bootstrap/` identify that tested toolchain.
