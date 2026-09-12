@@ -3,16 +3,16 @@ import application
 import settings
 
 pub func main(arguments: list[str]) -> int!:
-    let config = try settings.parse(arguments)
+    let config = settings.parse(arguments)
     let options = ServerConfig(address = config.address, port = config.port,
         network_workers = config.network_workers, application_workers = config.application_workers,
         temporary_directory = config.upload_directory)
-    let server = try Server(options, application.configure, config.upload_directory)
-    try server.mount("/", try StaticRoot(config.public_directory))
-    try server.shutdown_on_signals()
-    try server.start()
-    print(f"READY {try server.port()}")
-    try server.run()
+    let server = Server(options, application.configure, config.upload_directory)
+    server.mount("/", StaticRoot(config.public_directory))
+    server.shutdown_on_signals()
+    server.start()
+    print(f"READY {server.port()}")
+    server.run()
     server.close()
     print("STOPPED")
     return 0

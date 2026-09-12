@@ -22,20 +22,20 @@ A handler takes a scoped request and returns an owned response:
 
 ```luce
 pub func health(self, request: Request) -> Response!:
-    let result = try Value()
-    try result.set_text("status", "ok")
-    return try Response.json(result)
+    let result = Value()
+    result.set_text("status", "ok")
+    return Response.json(result)
 ```
 
 The worker-local factory registers methods directly:
 
 ```luce
 let api = Api(upload_directory)
-let router = try Router()
-try router.get("/api/health", api.health)
-try router.get("/api/items/{id}", api.item)
-try router.websocket("/ws/echo", api.websocket_echo)
-return try router.application()
+let router = Router()
+router.get("/api/health", api.health)
+router.get("/api/items/{id}", api.item)
+router.websocket("/ws/echo", api.websocket_echo)
+return router.application()
 ```
 
 `Value` comes from the standard `json` module. The library supplies `Server`,
@@ -49,9 +49,9 @@ WebSocket behavior is similarly direct:
 
 ```luce
 pub func websocket_echo(self, session: Session) -> unit!:
-    try session.accept()
-    while let message = try session.receive():
-        try session.send(message)
+    session.accept()
+    while let message = session.receive():
+        session.send(message)
 ```
 
 The example accepts openings without an identity/Origin restriction and chooses

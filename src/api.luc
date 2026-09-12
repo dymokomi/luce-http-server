@@ -6,9 +6,9 @@ from websocket import Session
 import http
 
 func problem(status: int, message: str) -> Response!:
-    let result = try Value()
-    try result.set_text("error", message)
-    return try Response.json(result, status)
+    let result = Value()
+    result.set_text("error", message)
+    return Response.json(result, status)
 
 pub class Api:
     var upload_directory: str
@@ -17,58 +17,58 @@ pub class Api:
         self.upload_directory = upload_directory
 
     pub func health(self, request: Request) -> Response!:
-        let result = try Value()
-        try result.set_text("status", "ok")
-        return try Response.json(result)
+        let result = Value()
+        result.set_text("status", "ok")
+        return Response.json(result)
 
     pub func item(self, request: Request) -> Response!:
         let identifier = request.integer_parameter("id") catch failure:
-            return try problem(400, "id must be an integer")
+            return problem(400, "id must be an integer")
         if identifier < 1:
-            return try problem(400, "id must be positive")
-        let result = try Value()
-        try result.set_integer("id", identifier)
-        try result.set_text("name", f"Example item {identifier}")
-        return try Response.json(result)
+            return problem(400, "id must be positive")
+        let result = Value()
+        result.set_integer("id", identifier)
+        result.set_text("name", f"Example item {identifier}")
+        return Response.json(result)
 
     pub func greet(self, request: Request) -> Response!:
         let value = request.query("name") catch failure:
             if failure.code == http.invalid_request:
-                return try problem(400, "invalid query value")
+                return problem(400, "invalid query value")
             error(failure.code, failure.message)
         let name = value else "world"
-        let result = try Value()
-        try result.set_text("message", f"Hello, {name}!")
-        return try Response.json(result)
+        let result = Value()
+        result.set_text("message", f"Hello, {name}!")
+        return Response.json(result)
 
     pub func echo(self, request: Request) -> Response!:
-        let body = try request.body()
+        let body = request.body()
         let data = body.bytes(1048576) catch failure:
             if failure.code == http.limit_exceeded:
-                return try problem(413, "echo body exceeds 1 MiB")
+                return problem(413, "echo body exceeds 1 MiB")
             error(failure.code, failure.message)
-        return try Response.bytes(data)
+        return Response.bytes(data)
 
     pub func upload(self, request: Request) -> Response!:
         let name = request.parameter("name") else ""
-        let body = try request.body()
+        let body = request.body()
         body.save(self.upload_directory + "/" + name) catch failure:
             if failure.code == http.file_exists:
-                return try problem(409, "file already exists")
+                return problem(409, "file already exists")
             error(failure.code, failure.message)
-        let result = try Value()
-        try result.set_text("name", name)
-        try result.set_boolean("stored", true)
-        return try Response.json(result, 201)
+        let result = Value()
+        result.set_text("name", name)
+        result.set_boolean("stored", true)
+        return Response.json(result, 201)
 
     pub func download(self, request: Request) -> Response!:
         let name = request.parameter("name") else ""
         return Response.file(self.upload_directory + "/" + name) catch failure:
             if failure.code == http.file_missing:
-                return try problem(404, "file not found")
+                return problem(404, "file not found")
             error(failure.code, failure.message)
 
     pub func websocket_echo(self, session: Session) -> unit!:
-        try session.accept()
-        while let message = try session.receive():
-            try session.send(message)
+        session.accept()
+        while let message = session.receive():
+            session.send(message)

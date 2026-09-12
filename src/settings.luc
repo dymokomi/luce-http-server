@@ -18,13 +18,13 @@ pub func parse(arguments: list[str]) -> Settings!:
             error(http.invalid_request, f"missing value for {option}")
         let value = arguments[at + 1]
         if option == "--port":
-            result.port = try int(value)
+            result.port = int(value)
         elif option == "--address":
             result.address = value
         elif option == "--network-workers":
-            result.network_workers = try int(value)
+            result.network_workers = int(value)
         elif option == "--application-workers":
-            result.application_workers = try int(value)
+            result.application_workers = int(value)
         elif option == "--public":
             result.public_directory = value
         elif option == "--uploads":
