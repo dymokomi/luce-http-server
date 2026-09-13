@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 import select
+import queue
+import threading
 import shutil
 import signal
 import socket
@@ -44,6 +46,40 @@ def finish_process(process, timeout):
         time.sleep(.01)
 
 
+def startup_line(process):
+    if os.name != 'nt':
+        ready, _, _ = select.select([process.stdout], [], [], 15)
+        assert ready, 'application startup timed out'
+        return process.stdout.readline()
+    lines = queue.Queue()
+    threading.Thread(target=lambda: lines.put(process.stdout.readline()), daemon=True).start()
+    try:
+        return lines.get(timeout=15)
+    except queue.Empty:
+        raise AssertionError('application startup timed out') from None
+
+
+def request_shutdown(process_id):
+    if os.name != 'nt':
+        os.kill(process_id, signal.SIGTERM)
+        return
+    # The server owns a hidden console. A short-lived helper attaches to that
+    # console to deliver a real CTRL_BREAK event without signaling the test host.
+    helper = r"""
+import ctypes, sys, time
+kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+handler_type = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_uint32)
+handler = handler_type(lambda event: 1)
+kernel.FreeConsole()
+assert kernel.AttachConsole(int(sys.argv[1])), ctypes.get_last_error()
+assert kernel.SetConsoleCtrlHandler(handler, True), ctypes.get_last_error()
+assert kernel.GenerateConsoleCtrlEvent(1, 0), ctypes.get_last_error()
+time.sleep(.1)
+kernel.FreeConsole()
+"""
+    subprocess.run([sys.executable, '-c', helper, str(process_id)], check=True, timeout=5)
+
+
 def frame(opcode, payload=b''):
     mask = os.urandom(4)
     length = len(payload)
@@ -75,13 +111,17 @@ def check(binary, heap=False):
             if sys.platform != 'darwin':
                 raise RuntimeError('--heap requires the macOS leaks tool')
             command = ['/usr/bin/leaks', '--quiet', '--noContent', '--atExit', '--', *command]
+        launch = {}
+        if os.name == 'nt':
+            startup = subprocess.STARTUPINFO()
+            startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startup.wShowWindow = subprocess.SW_HIDE
+            launch = dict(creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=startup)
         process = subprocess.Popen(command,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, **launch)
         application_pid = process.pid
         try:
-            ready, _, _ = select.select([process.stdout], [], [], 15)
-            assert ready, 'application startup timed out'
-            line = process.stdout.readline()
+            line = startup_line(process)
             if not line.startswith(b'READY '):
                 stdout, stderr = process.communicate(timeout=5)
                 raise AssertionError((line, process.returncode, stdout, stderr))
@@ -163,7 +203,7 @@ def check(binary, heap=False):
             while set(p.name for p in uploads.iterdir()) != {'payload.bin'} and time.monotonic() < deadline:
                 time.sleep(.01)
             assert set(p.name for p in uploads.iterdir()) == {'payload.bin'}
-            os.kill(application_pid, signal.SIGTERM)
+            request_shutdown(application_pid)
             stdout, stderr = finish_process(process, 30) if heap else process.communicate(timeout=10)
             if heap:
                 assert stdout.startswith(b'STOPPED\n') and b'0 leaks for 0 total leaked bytes' in stdout, stdout
@@ -180,7 +220,7 @@ def check(binary, heap=False):
                         pass
                 process.kill()
                 process.communicate()
-        print('PASS Luce application: REST, static, streamed files, concurrent clients, WebSocket, ARC cleanup, SIGTERM', flush=True)
+        print('PASS Luce application: REST, static, streamed files, concurrent clients, WebSocket, ARC cleanup, graceful shutdown', flush=True)
 
 
 if __name__ == '__main__':

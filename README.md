@@ -102,3 +102,8 @@ file transfers, overwrite refusal, HEAD, malformed input, concurrent clients,
 WebSocket control/data frames, temporary cleanup and SIGTERM. See
 [validation evidence](docs/VALIDATION.md). CI runs the pinned toolchain on ARM64
 macOS and x86-64 Linux. Licensed under MIT or Apache-2.0.
+
+## Windows x64
+
+Build sibling `luce-base` and `luce` checkouts with `python tools/build_windows.py` in each compiler repository. Run `python tests/run.py` in this repository; the runner selects the sibling Windows executables.
+Windows shutdown uses console control events. The integration runner gives its server a private console and verifies graceful Ctrl+Break shutdown. Temporary storage defaults to the host temporary directory.
