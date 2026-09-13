@@ -20,9 +20,9 @@ def build(luce: Path, base: Path, server: Path, output: Path, opt: int) -> None:
         project = Path(temporary)
         source = project / "src"
         shutil.copytree(ROOT / "src", source)
-        (project / "luce.toml").write_text(
+        (project / "luce.toml").write_bytes((
             '[package]\nname = "luce_http_server"\nsource = "src"\n\n'
-            '[dependencies]\nluce_server = ' + json.dumps(server.as_posix()) + '\n', encoding='utf-8', newline='\n')
+            '[dependencies]\nluce_server = ' + json.dumps(server.as_posix()) + '\n').encode('utf-8'))
         environment = dict(os.environ, LUCE_BASE=str(base))
         subprocess.run([str(luce), "build", str(source / "main.luc"), "--native", "--opt",
                         str(opt), "-o", str(output)], env=environment, cwd=ROOT, check=True)
