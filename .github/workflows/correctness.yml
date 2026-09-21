@@ -28,6 +28,7 @@ jobs:
           echo "base=$(cat luce-http-server/bootstrap/BASE)" >> "$GITHUB_OUTPUT"
           echo "luce=$(cat luce-http-server/bootstrap/LUCE)" >> "$GITHUB_OUTPUT"
           echo "server=$(cat luce-http-server/bootstrap/SERVER)" >> "$GITHUB_OUTPUT"
+          echo "json=$(cat luce-http-server/bootstrap/JSON)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           repository: dymokomi/luce-base
@@ -43,6 +44,11 @@ jobs:
           repository: dymokomi/luce-server
           ref: ${{ steps.pins.outputs.server }}
           path: luce-server
+      - uses: actions/checkout@v7
+        with:
+          repository: dymokomi/luce-json
+          ref: ${{ steps.pins.outputs.json }}
+          path: luce-json
       - name: Select Clang
         run: |
           mkdir -p "$RUNNER_TEMP/luce-bin"

@@ -19,6 +19,7 @@ jobs:
           "base=$(Get-Content luce-http-server/bootstrap/BASE)" >> $env:GITHUB_OUTPUT
           "luce=$(Get-Content luce-http-server/bootstrap/LUCE)" >> $env:GITHUB_OUTPUT
           "server=$(Get-Content luce-http-server/bootstrap/SERVER)" >> $env:GITHUB_OUTPUT
+          "json=$(Get-Content luce-http-server/bootstrap/JSON)" >> $env:GITHUB_OUTPUT
       - uses: actions/checkout@v7
         with:
           repository: dymokomi/luce-base
@@ -34,6 +35,11 @@ jobs:
           repository: dymokomi/luce-server
           ref: ${{ steps.pins.outputs.server }}
           path: luce-server
+      - uses: actions/checkout@v7
+        with:
+          repository: dymokomi/luce-json
+          ref: ${{ steps.pins.outputs.json }}
+          path: luce-json
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
