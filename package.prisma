@@ -1,7 +1,7 @@
 #prisma 4.0
 def package "luce-http-server" {
     str owner = "dymokomi"
-    str version = "0.1.3"
+    str version = "0.1.4"
     str kind = "tool"
     str language = "luce"
     str description = "A native HTTP application written entirely in Luce, using the separate luce-server library written in Luce Base. It demonstrates REST handlers, static pages, uploads/downloads, WebSockets and multiple application workers."

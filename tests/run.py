@@ -12,12 +12,10 @@ from build import build
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--base', type=Path, default=Path(os.environ.get('LUCE_BASE_COMPILER', ROOT.parent / ('luce-base/build/luce-base.exe' if os.name == 'nt' else 'luce-base/build/luce-base'))))
 parser.add_argument('--luce', type=Path, default=ROOT.parent / ('luce/build/luce.exe' if os.name == 'nt' else 'luce/build/luce'))
-parser.add_argument('--server', type=Path, default=ROOT.parent / 'luce-server')
-parser.add_argument('--json', type=Path, default=ROOT.parent / 'luce-json')
 parser.add_argument('--opt', type=int, choices=range(4), action='append')
 args = parser.parse_args()
 for level in args.opt if args.opt is not None else range(4):
     executable = ROOT / 'build' / f'luce-http-server-{level}'
-    build(args.luce, args.base, args.server, args.json, executable, level)
+    build(args.luce, args.base, executable, level)
     subprocess.run([sys.executable, ROOT / 'tests/integration.py', executable], check=True, timeout=90)
     print(f'PASS native opt {level}', flush=True)
