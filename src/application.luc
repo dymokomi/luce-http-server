@@ -1,6 +1,6 @@
 ## Each worker constructs its own handlers. The server owns thread startup,
 ## dispatch and shutdown; this factory declares only application behavior.
-from http import Router, Application
+from luce_server.http import Router, Application
 from api import Api
 
 pub func configure(upload_directory: str) -> Application!:

@@ -1,4 +1,4 @@
-from http import Server, ServerConfig, StaticRoot
+from luce_server.http import Server, ServerConfig, StaticRoot
 import application
 import settings
 

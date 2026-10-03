@@ -1,9 +1,9 @@
 ## REST and session behavior. The package owns requests, wire framing, bounded
 ## storage and cleanup; the standard JSON value owns precise serialization.
-from http import Request, Response
-from json import Value
-from websocket import Session
-import http
+from luce_server.http import Request, Response
+from luce_json.json import Value
+from luce_server.websocket import Session
+import luce_server.http
 
 func problem(status: int, message: str) -> Response!:
     let result = Value()
