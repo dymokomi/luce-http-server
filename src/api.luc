@@ -3,7 +3,7 @@
 from luce_server.http import Request, Response
 from luce_json.json import Value
 from luce_server.websocket import Session
-import luce_server.http
+from luce_server import http
 
 func problem(status: int, message: str) -> Response!:
     let result = Value()

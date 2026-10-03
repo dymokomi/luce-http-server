@@ -1,5 +1,5 @@
 ## Application CLI settings. ServerConfig validates transport limits separately.
-import luce_server.http
+from luce_server import http
 
 pub struct Settings:
     pub var address: str = "127.0.0.1"
