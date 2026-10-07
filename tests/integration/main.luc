@@ -7,8 +7,8 @@ from luce_std import files, paths, process
 let failed = ErrorCode.package(1)
 
 pub func main(arguments: list[str]) -> int!:
-    let here = process.current_directory()
-    let top = paths.directory(paths.directory(here))
+    let top = process.current_directory()
+    let here = process.variable("LUC_TEST_DIR") else error(failed, "LUC_TEST_DIR names no test directory")
     let luce = process.variable("LUCE") else "luce"
     let output = paths.join(top, "build/tests/integration/application")
     files.ensure_directory(paths.directory(output))
