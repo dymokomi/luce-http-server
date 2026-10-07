@@ -1,0 +1,23 @@
+# The application itself, built from src/main.luc and driven by independent clients:
+# integration.py talks to it over HTTP and WebSockets with Python's own libraries (REST
+# handlers, static pages, uploads and downloads, workers, graceful shutdown). `luc test`
+# runs this with LUCE and LUCE_BASE naming the compilers.
+from luce_std import files, paths, process
+
+let failed = ErrorCode.package(1)
+
+pub func main(arguments: list[str]) -> int!:
+    let here = process.current_directory()
+    let top = paths.directory(paths.directory(here))
+    let luce = process.variable("LUCE") else "luce"
+    let output = paths.join(top, "build/tests/integration/application")
+    files.ensure_directory(paths.directory(output))
+    let built = process.run(luce, ["build", paths.join(top, "src/main.luc"), "--native", "-o", output], top)
+    if built.exit_code != 0:
+        error(failed, f"build the application: {built.output}{built.error_output}")
+    let ran = process.run("python3", ["integration.py", output], here)
+    print(ran.output.trim_end())
+    if ran.exit_code != 0:
+        print(ran.error_output)
+        return 1
+    return 0

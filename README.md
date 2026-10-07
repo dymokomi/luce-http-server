@@ -92,12 +92,12 @@ package locations. Normal build output is the binary, with no generated Base cod
 or staged dependency trees left behind. Tests additionally produce named binaries.
 
 ```sh
-./test.sh
-python3 tests/integration.py build/luce-http-server-0 --heap  # macOS
+luc test
+(cd tests/integration && python3 integration.py ../../build/tests/integration/application --heap)  # macOS, after luc test
 ```
 
-Tests drive real binaries at native optimization levels 0–3 using independent
-Python clients. They cover REST validation, Unicode/JSON, static content, large
+`tests/integration` builds the application and drives it with independent Python
+clients (`integration.py`). They cover REST validation, Unicode/JSON, static content, large
 file transfers, overwrite refusal, HEAD, malformed input, concurrent clients,
 WebSocket control/data frames, temporary cleanup and SIGTERM. See
 [validation evidence](docs/VALIDATION.md). CI runs the pinned toolchain on ARM64
@@ -105,5 +105,5 @@ macOS and x86-64 Linux. Licensed under MIT or Apache-2.0.
 
 ## Windows x64
 
-Build sibling `luce-base` and `luce` checkouts with `python tools/build_windows.py` in each compiler repository. Run `python tests/run.py` in this repository; the runner selects the sibling Windows executables.
+Build sibling `luce-base` and `luce` checkouts with `python tools/build_windows.py` in each compiler repository. Run `luc test` in this repository.
 Windows shutdown uses console control events. The integration runner gives its server a private console and verifies graceful Ctrl+Break shutdown. Temporary storage defaults to the host temporary directory.

@@ -1,0 +1,9 @@
+#prisma 4.0
+def package "luce-http-server-integration" {
+    str language = "luce"
+    str source = "."
+    def dependency "luce-std" {
+        str owner = "dymokomi"
+        str path = "../../../luce-std"
+    }
+}
